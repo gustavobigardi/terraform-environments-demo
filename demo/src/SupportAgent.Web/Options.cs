@@ -20,7 +20,6 @@ public sealed class FoundryOptions
 {
     public const string SectionName = "Foundry";
 
-    /// <summary>https://&lt;foundry&gt;.services.ai.azure.com/api/projects/&lt;projeto&gt;</summary>
     public string? ProjectEndpoint { get; set; }
 
     public string? ProjectName { get; set; }
