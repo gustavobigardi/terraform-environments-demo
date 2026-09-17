@@ -5,7 +5,7 @@ description: >
 
 inputs:
   env-key:
-    description: Chave explícita (ex.: TESC-001). Quando vazia, é derivada da branch.
+    description: "Chave explícita (ex.: TESC-001). Quando vazia, é derivada da branch."
     required: false
     default: ""
 
