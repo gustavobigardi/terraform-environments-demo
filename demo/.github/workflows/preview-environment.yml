@@ -1,0 +1,212 @@
+name: Preview environment
+
+run-name: ${{ inputs.action }} preview ${{ inputs.env_key }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      env_key:
+        description: "Chave da tarefa (ex.: TESC-001)"
+        required: true
+        type: string
+      action:
+        description: O que fazer com o ambiente
+        required: true
+        type: choice
+        default: create
+        options:
+          - create
+          - destroy
+      ttl_days:
+        description: Validade do preview em dias
+        required: false
+        type: number
+        default: 7
+      delete_branch:
+        description: "destroy: apagar a branch preview/<chave>"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  id-token: write
+  contents: write
+  actions: write
+
+concurrency:
+  group: environment-${{ inputs.env_key }}
+  cancel-in-progress: false
+
+env:
+  ARM_USE_OIDC: "true"
+  ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+  TFSTATE_RESOURCE_GROUP: ${{ vars.TFSTATE_RESOURCE_GROUP }}
+  TFSTATE_STORAGE_ACCOUNT: ${{ vars.TFSTATE_STORAGE_ACCOUNT }}
+  TFSTATE_CONTAINER: ${{ vars.TFSTATE_CONTAINER }}
+  TF_VAR_workload: ${{ vars.WORKLOAD }}
+  TF_VAR_unique_suffix: ${{ vars.UNIQUE_SUFFIX }}
+  TF_IN_AUTOMATION: "true"
+  TF_DIR: infra/environments/app
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      env-key: ${{ steps.env.outputs.env-key }}
+      env-type: ${{ steps.env.outputs.env-type }}
+      branch: ${{ steps.env.outputs.branch }}
+      state-key: ${{ steps.env.outputs.state-key }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: env
+        uses: ./.github/actions/resolve-environment
+        with:
+          env-key: ${{ inputs.env_key }}
+
+      - name: Bloquear o ambiente principal
+        if: steps.env.outputs.env-type != 'preview'
+        run: |
+          echo "::error::Este workflow gerencia apenas previews. O main é mantido pelo deploy da branch main."
+          exit 1
+
+  create:
+    if: inputs.action == 'create'
+    needs: resolve
+    runs-on: ubuntu-latest
+    environment: preview
+    env:
+      ENV_KEY: ${{ needs.resolve.outputs.env-key }}
+      BRANCH: ${{ needs.resolve.outputs.branch }}
+      STATE_KEY: ${{ needs.resolve.outputs.state-key }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: terraform init (state app/${{ env.ENV_KEY }})
+        run: scripts/tf-init.sh "$TF_DIR" "$STATE_KEY"
+
+      - name: terraform apply
+        run: |
+          terraform -chdir="$TF_DIR" apply -auto-approve -input=false \
+            -var "env_key=$ENV_KEY" \
+            -var "branch=$BRANCH" \
+            -var "created_by=${{ github.actor }}" \
+            -var "ttl_days=${{ inputs.ttl_days }}"
+
+      - id: tf
+        name: Ler outputs
+        run: |
+          terraform -chdir="$TF_DIR" output -json > "$RUNNER_TEMP/outputs.json"
+          echo "web_app_url=$(jq -r .web_app_url.value "$RUNNER_TEMP/outputs.json")" >> "$GITHUB_OUTPUT"
+          echo "expires_at=$(jq -r .expires_at.value "$RUNNER_TEMP/outputs.json")" >> "$GITHUB_OUTPUT"
+
+      - name: Criar branch ${{ env.BRANCH }}
+        run: |
+          if git ls-remote --exit-code --heads origin "$BRANCH" > /dev/null; then
+            echo "Branch $BRANCH já existe — mantendo."
+          else
+            git push origin "origin/main:refs/heads/$BRANCH"
+          fi
+
+      # Pushes feitos com GITHUB_TOKEN não disparam o evento push: o primeiro deploy é explícito.
+      - name: Disparar o primeiro deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run deploy.yml --ref "$BRANCH" -f env_key="$ENV_KEY"
+
+      - name: Resumo
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## Preview \`$ENV_KEY\` criado
+
+          | | |
+          |---|---|
+          | Branch | \`$BRANCH\` |
+          | URL | ${{ steps.tf.outputs.web_app_url }} |
+          | Expira em | ${{ steps.tf.outputs.expires_at }} |
+
+          Abra PRs de feature contra \`$BRANCH\`. Ao final: PR \`$BRANCH\` → \`main\` e rode este workflow com **destroy**.
+          EOF
+
+  destroy:
+    if: inputs.action == 'destroy'
+    needs: resolve
+    runs-on: ubuntu-latest
+    environment: preview
+    env:
+      ENV_KEY: ${{ needs.resolve.outputs.env-key }}
+      BRANCH: ${{ needs.resolve.outputs.branch }}
+      STATE_KEY: ${{ needs.resolve.outputs.state-key }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: terraform init (state app/${{ env.ENV_KEY }})
+        run: scripts/tf-init.sh "$TF_DIR" "$STATE_KEY"
+
+      - id: tf
+        name: Ler outputs do ambiente
+        run: |
+          endpoint="$(terraform -chdir="$TF_DIR" output -raw foundry_project_endpoint 2>/dev/null || true)"
+          echo "foundry_project_endpoint=$endpoint" >> "$GITHUB_OUTPUT"
+
+      # Arquivos, vector stores e versões do agente persistem até serem apagados explicitamente.
+      - name: Limpar dados do agente no projeto Foundry
+        if: steps.tf.outputs.foundry_project_endpoint != ''
+        run: |
+          dotnet run --project src/SupportAgent.AgentSync -c Release -- cleanup \
+            --endpoint "${{ steps.tf.outputs.foundry_project_endpoint }}" \
+            --env-key "$ENV_KEY" \
+            --agent-dir agent
+
+      - name: terraform destroy
+        run: |
+          terraform -chdir="$TF_DIR" destroy -auto-approve -input=false \
+            -var "env_key=$ENV_KEY" \
+            -var "branch=$BRANCH" \
+            -var "created_by=${{ github.actor }}"
+
+      - name: Remover o state do ambiente
+        run: |
+          az storage blob delete --auth-mode login \
+            --account-name "$TFSTATE_STORAGE_ACCOUNT" \
+            --container-name "${TFSTATE_CONTAINER:-tfstate}" \
+            --name "$STATE_KEY" \
+            --delete-snapshots include || true
+
+      - name: Apagar branch ${{ env.BRANCH }}
+        if: inputs.delete_branch
+        run: git push origin --delete "$BRANCH" || echo "Branch já não existia."
+
+      - name: Resumo
+        run: echo "## Preview \`$ENV_KEY\` destruído — recursos, projeto Foundry e state removidos." >> "$GITHUB_STEP_SUMMARY"

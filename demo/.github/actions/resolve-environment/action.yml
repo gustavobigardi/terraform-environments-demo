@@ -1,0 +1,81 @@
+name: Resolve environment
+description: >
+  Converte o contexto do GitHub (branch, PR ou input manual) na chave do ambiente
+  e nos valores derivados usados por Terraform e deploy.
+
+inputs:
+  env-key:
+    description: Chave explícita (ex.: TESC-001). Quando vazia, é derivada da branch.
+    required: false
+    default: ""
+
+outputs:
+  env-key:
+    description: Chave normalizada (main, tesc-001, ...)
+    value: ${{ steps.resolve.outputs.env_key }}
+  env-type:
+    description: main ou preview
+    value: ${{ steps.resolve.outputs.env_type }}
+  branch:
+    description: Branch que alimenta o ambiente
+    value: ${{ steps.resolve.outputs.branch }}
+  state-key:
+    description: Chave do state remoto do Terraform
+    value: ${{ steps.resolve.outputs.state_key }}
+
+runs:
+  using: composite
+  steps:
+    - id: resolve
+      shell: bash
+      env:
+        INPUT_ENV_KEY: ${{ inputs.env-key }}
+        EVENT_NAME: ${{ github.event_name }}
+        BASE_REF: ${{ github.base_ref }}
+        REF_NAME: ${{ github.ref_name }}
+      run: |
+        set -euo pipefail
+
+        if [[ -n "$INPUT_ENV_KEY" ]]; then
+          key="$INPUT_ENV_KEY"
+        else
+          # Em pull_request, ref_name é "<numero>/merge": o ambiente é o da branch de DESTINO.
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            ref="$BASE_REF"
+          else
+            ref="$REF_NAME"
+          fi
+
+          case "$ref" in
+            main)      key="main" ;;
+            preview/*) key="${ref#preview/}" ;;
+            *)
+              echo "::error::A branch '$ref' não corresponde a nenhum ambiente (use main ou preview/<chave>)."
+              exit 1
+              ;;
+          esac
+        fi
+
+        key="$(echo "$key" | tr '[:upper:]' '[:lower:]')"
+
+        if ! [[ "$key" =~ ^[a-z0-9-]{3,20}$ ]]; then
+          echo "::error::Chave de ambiente inválida: '$key'"
+          exit 1
+        fi
+
+        if [[ "$key" == "main" ]]; then
+          type="main"
+          branch="main"
+        else
+          type="preview"
+          branch="preview/$key"
+        fi
+
+        {
+          echo "env_key=$key"
+          echo "env_type=$type"
+          echo "branch=$branch"
+          echo "state_key=app/$key.tfstate"
+        } >> "$GITHUB_OUTPUT"
+
+        echo "Ambiente **$key** ($type) · branch \`$branch\` · state \`app/$key.tfstate\`" >> "$GITHUB_STEP_SUMMARY"

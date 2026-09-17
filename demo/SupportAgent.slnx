@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SupportAgent.AgentSync/SupportAgent.AgentSync.csproj" />
+    <Project Path="src/SupportAgent.Web/SupportAgent.Web.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,187 @@
+@page "/"
+@rendermode InteractiveServer
+@implements IDisposable
+@inject SupportAgentChat Chat
+@inject IOptions<EnvironmentOptions> EnvironmentOptions
+
+<PageTitle>Suporte Contoso Café · @EnvironmentOptions.Value.Key</PageTitle>
+
+@if (!Chat.IsConfigured)
+{
+    <div class="alert alert-warning" role="alert">
+        <strong>Foundry não configurado.</strong>
+        Defina <code>Foundry:ProjectEndpoint</code> e <code>Foundry:AgentName</code>
+        (no Azure, essas app settings são criadas pelo Terraform).
+    </div>
+}
+
+<section class="conversation" aria-live="polite">
+    @if (_messages.Count == 0)
+    {
+        <div class="welcome">
+            <h1>Como podemos ajudar?</h1>
+            <p>Pergunte sobre as cafeteiras <strong>Barista X1</strong> e <strong>Barista X2</strong>: descalcificação, códigos de erro, garantia, Wi-Fi e mais.</p>
+            <div class="suggestions">
+                @foreach (var suggestion in Suggestions)
+                {
+                    <button type="button" class="suggestion" disabled="@(!CanSend)" @onclick="() => SendAsync(suggestion)">@suggestion</button>
+                }
+            </div>
+        </div>
+    }
+
+    @foreach (var message in _messages)
+    {
+        <article class="message @(message.FromUser ? "from-user" : "from-agent")">
+            @if (message.FromUser)
+            {
+                <p>@message.Text</p>
+            }
+            else
+            {
+                @if (message.Queries.Count > 0)
+                {
+                    <div class="queries">
+                        <span class="label">Buscou na base:</span>
+                        @foreach (var query in message.Queries)
+                        {
+                            <span class="chip">@query</span>
+                        }
+                    </div>
+                }
+
+                @if (string.IsNullOrEmpty(message.Text))
+                {
+                    <p class="typing">Consultando os manuais…</p>
+                }
+                else
+                {
+                    <div class="markdown">@((MarkupString)Markdown.ToHtml(message.Text, MarkdownPipeline))</div>
+                }
+
+                @if (message.Citations.Count > 0)
+                {
+                    <div class="citations">
+                        <span class="label">Fontes:</span>
+                        @foreach (var citation in message.Citations)
+                        {
+                            <span class="chip chip-source">@citation</span>
+                        }
+                    </div>
+                }
+            }
+        </article>
+    }
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger" role="alert">@_error</div>
+    }
+</section>
+
+<form class="composer" @onsubmit="() => SendAsync(_draft)">
+    <input class="form-control" placeholder="Descreva o problema da sua cafeteira…"
+           @bind="_draft" @bind:event="oninput" disabled="@(!Chat.IsConfigured || _busy)" />
+    <button type="submit" class="btn btn-coffee" disabled="@(!CanSend || string.IsNullOrWhiteSpace(_draft))">Enviar</button>
+    <button type="button" class="btn btn-link" disabled="@_busy" @onclick="Reset">Nova conversa</button>
+</form>
+
+@code {
+    private static readonly string[] Suggestions =
+    [
+        "Como descalcificar minha cafeteira?",
+        "Minha Barista X2 está mostrando o erro E09. O que faço?",
+        "A luz da minha Barista X1 está piscando âmbar.",
+    ];
+
+    private static readonly MarkdownPipeline MarkdownPipeline = new MarkdownPipelineBuilder()
+        .UseAdvancedExtensions()
+        .DisableHtml()
+        .Build();
+
+    private readonly List<ChatMessage> _messages = [];
+    private readonly CancellationTokenSource _disposal = new();
+    private string _draft = string.Empty;
+    private string? _previousResponseId;
+    private string? _error;
+    private bool _busy;
+
+    private bool CanSend => Chat.IsConfigured && !_busy;
+
+    private async Task SendAsync(string question)
+    {
+        if (!CanSend || string.IsNullOrWhiteSpace(question))
+        {
+            return;
+        }
+
+        _error = null;
+        _busy = true;
+        _draft = string.Empty;
+        _messages.Add(ChatMessage.User(question.Trim()));
+
+        var answer = ChatMessage.Agent();
+        _messages.Add(answer);
+
+        try
+        {
+            await foreach (var chatEvent in Chat.AskAsync(question.Trim(), _previousResponseId, _disposal.Token))
+            {
+                switch (chatEvent)
+                {
+                    case ResponseStarted started:
+                        _previousResponseId = started.ResponseId;
+                        break;
+                    case SearchPerformed search:
+                        answer.Queries.AddRange(search.Queries);
+                        break;
+                    case TextDelta delta:
+                        answer.Text += delta.Text;
+                        break;
+                    case MessageCompleted completed:
+                        answer.Text = completed.Text;
+                        answer.Citations.AddRange(completed.Citations.Except(answer.Citations));
+                        break;
+                }
+
+                StateHasChanged();
+            }
+        }
+        catch (OperationCanceledException) when (_disposal.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            _messages.Remove(answer);
+            _error = $"Não foi possível falar com o agente: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void Reset()
+    {
+        _messages.Clear();
+        _previousResponseId = null;
+        _error = null;
+    }
+
+    public void Dispose()
+    {
+        _disposal.Cancel();
+        _disposal.Dispose();
+    }
+
+    private sealed class ChatMessage
+    {
+        public bool FromUser { get; private init; }
+        public string Text { get; set; } = string.Empty;
+        public List<string> Queries { get; } = [];
+        public List<string> Citations { get; } = [];
+
+        public static ChatMessage User(string text) => new() { FromUser = true, Text = text };
+        public static ChatMessage Agent() => new() { FromUser = false };
+    }
+}

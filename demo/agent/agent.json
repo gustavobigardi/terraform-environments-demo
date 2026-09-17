@@ -1,0 +1,8 @@
+{
+  "name": "contoso-cafe-suporte",
+  "description": "Agente de suporte da Contoso Café com busca nos manuais, políticas e FAQs.",
+  "model": "gpt-5-mini",
+  "instructionsFile": "instructions.md",
+  "knowledgeFolder": "knowledge",
+  "vectorStorePrefix": "kb"
+}

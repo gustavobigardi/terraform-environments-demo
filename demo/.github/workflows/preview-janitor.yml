@@ -1,0 +1,81 @@
+name: Preview janitor
+
+on:
+  schedule:
+    # Dias úteis, 08:00 em Brasília (11:00 UTC).
+    - cron: "0 11 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      auto_destroy:
+        description: Destruir automaticamente os previews vencidos
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write
+  contents: read
+  issues: write
+  actions: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    environment: preview
+    steps:
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Listar previews pelas tags
+        run: |
+          az group list --tag environment-type=preview \
+            --query "[].{resourceGroup:name, key:tags.\"environment-key\", branch:tags.branch, owner:tags.\"created-by\", expiresAt:tags.\"expires-at\"}" \
+            -o json > previews.json
+
+          now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          jq --arg now "$now" '[.[] | select(.expiresAt != "never" and .expiresAt < $now)]' previews.json > expired.json
+
+          {
+            echo "## Previews ativos: $(jq length previews.json) · vencidos: $(jq length expired.json)"
+            echo ""
+            echo "| Chave | Branch | Dono | Expira em |"
+            echo "|---|---|---|---|"
+            jq -r '.[] | "| \(.key) | \(.branch) | \(.owner) | \(.expiresAt) |"' previews.json
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Destruir previews vencidos
+        if: inputs.auto_destroy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for key in $(jq -r '.[].key' expired.json); do
+            echo "Disparando destroy de $key"
+            gh workflow run preview-environment.yml --repo "$GITHUB_REPOSITORY" --ref main \
+              -f env_key="$key" -f action=destroy
+          done
+
+      - name: Abrir/atualizar issue de previews vencidos
+        if: ${{ !inputs.auto_destroy }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          count="$(jq length expired.json)"
+          [[ "$count" == "0" ]] && { echo "Nenhum preview vencido."; exit 0; }
+
+          {
+            echo "Os previews abaixo passaram da data em \`expires-at\`. Faça o merge/descarte e rode **Preview environment → destroy**, ou renove com \`ttl_days\`."
+            echo ""
+            echo "| Chave | Branch | Dono | Venceu em |"
+            echo "|---|---|---|---|"
+            jq -r '.[] | "| \(.key) | \(.branch) | @\(.owner) | \(.expiresAt) |"' expired.json
+          } > body.md
+
+          number="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --search 'in:title "Previews vencidos"' --json number -q '.[0].number')"
+          if [[ -n "$number" ]]; then
+            gh issue edit "$number" --repo "$GITHUB_REPOSITORY" --body-file body.md
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "Previews vencidos" --body-file body.md
+          fi

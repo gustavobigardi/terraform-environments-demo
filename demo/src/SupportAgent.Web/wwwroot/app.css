@@ -1,0 +1,56 @@
+:root {
+    --coffee-900: #3e2723;
+    --coffee-200: #d7bfae;
+    --coffee-100: #efe3d8;
+    --coffee-50: #f8f1eb;
+    --ink-800: #263238;
+    --ink-600: #546e7a;
+    --ink-100: #e0e4e7;
+    --ink-50: #eef1f3;
+    --page-bg: #fbf8f5;
+
+    /* Mesmas cores dos slides: main = teal, preview = laranja. */
+    --env-main: #1ba394;
+    --env-preview: #ee8a30;
+    --env-preview-soft: #fde6cf;
+    --env-local: #78909c;
+}
+
+html, body {
+    font-family: 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    background: var(--page-bg);
+    color: var(--ink-800);
+}
+
+a, .btn-link {
+    color: var(--coffee-900);
+}
+
+.btn-coffee {
+    color: #fff;
+    background-color: var(--coffee-900);
+    border-color: var(--coffee-900);
+}
+
+    .btn-coffee:hover, .btn-coffee:focus {
+        color: #fff;
+        background-color: #5d4037;
+    }
+
+.btn:focus, .btn:active:focus, .form-control:focus {
+    box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem var(--coffee-200);
+}
+
+h1:focus {
+    outline: none;
+}
+
+.blazor-error-boundary {
+    background: #b32121;
+    padding: 1rem;
+    color: white;
+}
+
+    .blazor-error-boundary::after {
+        content: "Ocorreu um erro."
+    }

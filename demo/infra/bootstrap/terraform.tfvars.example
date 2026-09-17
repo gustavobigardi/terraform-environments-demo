@@ -1,0 +1,5 @@
+subscription_id   = "00000000-0000-0000-0000-000000000000"
+location          = "eastus2"
+workload          = "supportagent"
+unique_suffix     = "dsvix26"
+github_repository = "gustavobigardi/preview-environments-demo"

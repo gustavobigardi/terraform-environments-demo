@@ -1,0 +1,44 @@
+@inherits LayoutComponentBase
+@inject IOptions<EnvironmentOptions> EnvironmentOptions
+@inject IOptions<FoundryOptions> FoundryOptions
+
+<div class="shell">
+    <header class="topbar">
+        <div class="brand">
+            <span class="brand-mark" aria-hidden="true">☕</span>
+            <div class="brand-text">
+                <strong>Contoso Café</strong>
+                <small>Central de suporte</small>
+            </div>
+        </div>
+
+        <div class="env env-@Env.Type.ToLowerInvariant()" title="Projeto Foundry: @(Foundry.ProjectName ?? "não configurado")">
+            <span class="env-dot" aria-hidden="true"></span>
+            <span class="env-key">@Env.Key</span>
+            <span class="env-meta">@Env.Branch · @(Foundry.ProjectName ?? "sem projeto")</span>
+        </div>
+    </header>
+
+    @if (Env.IsPreview)
+    {
+        <div class="preview-notice" role="status">
+            Você está no ambiente de <strong>preview @Env.Key</strong>, isolado do main.
+            O que for testado aqui só chega aos clientes depois do merge.
+        </div>
+    }
+
+    <main class="content">
+        @Body
+    </main>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    Ocorreu um erro inesperado.
+    <a href="." class="reload">Recarregar</a>
+    <span class="dismiss">🗙</span>
+</div>
+
+@code {
+    private EnvironmentOptions Env => EnvironmentOptions.Value;
+    private FoundryOptions Foundry => FoundryOptions.Value;
+}
