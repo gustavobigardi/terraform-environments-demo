@@ -4,6 +4,8 @@ Materiais da palestra apresentada no **Data Saturday Vitória 2026** por Gustavo
 
 O repositório contém o código completo da demo e uma versão em PDF dos slides. A palestra mostra como criar ambientes de preview efêmeros no Azure usando Terraform e GitHub Actions, com um agente de suporte no Microsoft Foundry e gestão assistida por GitHub Copilot e MCP.
 
+Para instruções detalhadas de setup, execução e uso da demonstração, consulte o README da demo em [demo/README.md](demo/README.md). Ele contém os passos e as orientações específicas da aplicação.
+
 ## Conteúdo
 
 | Pasta/arquivo | O que é |
