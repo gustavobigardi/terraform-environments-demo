@@ -48,7 +48,7 @@ env:
   TF_VAR_workload: ${{ vars.WORKLOAD }}
   TF_VAR_unique_suffix: ${{ vars.UNIQUE_SUFFIX }}
   TF_IN_AUTOMATION: "true"
-  TF_DIR: infra/environments/app
+  TF_DIR: demo/infra/environments/app
 
 jobs:
   resolve:
@@ -98,7 +98,7 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: terraform init (state app/${{ env.ENV_KEY }})
-        run: scripts/tf-init.sh "$TF_DIR" "$STATE_KEY"
+        run: demo/scripts/tf-init.sh "$TF_DIR" "$STATE_KEY"
 
       - name: terraform apply
         run: |
@@ -172,7 +172,7 @@ jobs:
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: terraform init (state app/${{ env.ENV_KEY }})
-        run: scripts/tf-init.sh "$TF_DIR" "$STATE_KEY"
+        run: demo/scripts/tf-init.sh "$TF_DIR" "$STATE_KEY"
 
       - id: tf
         name: Ler outputs do ambiente
@@ -184,10 +184,10 @@ jobs:
       - name: Limpar dados do agente no projeto Foundry
         if: steps.tf.outputs.foundry_project_endpoint != ''
         run: |
-          dotnet run --project src/SupportAgent.AgentSync -c Release -- cleanup \
+          dotnet run --project demo/src/SupportAgent.AgentSync -c Release -- cleanup \
             --endpoint "${{ steps.tf.outputs.foundry_project_endpoint }}" \
             --env-key "$ENV_KEY" \
-            --agent-dir agent
+            --agent-dir demo/agent
 
       - name: terraform destroy
         run: |

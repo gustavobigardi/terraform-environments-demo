@@ -17,22 +17,22 @@ feature/melhora-busca                 ● instructions v2
 | Conceito | Implementação |
 |---|---|
 | Chave do ambiente | `env_key`: `main` ou a tarefa em minúsculas (`tesc-001`) |
-| Branch como contrato | `main` → ambiente `main`; `preview/<env_key>` → ambiente `<env_key>` ([resolve-environment](.github/actions/resolve-environment/action.yml)) |
+| Branch como contrato | `main` → ambiente `main`; `preview/<env_key>` → ambiente `<env_key>` ([resolve-environment](../.github/actions/resolve-environment/action.yml)) |
 | Um módulo, N ambientes | [`infra/modules/app-environment`](infra/modules/app-environment/main.tf) cria main e previews |
 | State por ambiente | `terraform init -backend-config="key=app/<env_key>.tfstate"` ([tf-init.sh](scripts/tf-init.sh)) |
 | Compartilhado vs. isolado | Compartilhados: App Service Plan, Log Analytics, Foundry e deployment do modelo. Isolados por ambiente: Web App, App Insights e projeto Foundry |
 | Prompt como código | [`agent/instructions.md`](agent/instructions.md) e a [base](agent/knowledge), publicados pelo [AgentSync](src/SupportAgent.AgentSync) a cada deploy |
-| Governança de custo | Tags `environment-key`/`expires-at` em todos os recursos, [janitor](.github/workflows/preview-janitor.yml) e budget por RG, opcional (ligado quando `budget_contact_emails` é informado) |
-| Gestão assistida | Copilot + [Azure/GitHub/Terraform MCP](.vscode/mcp.json) e [prompt files](.github/prompts) |
+| Governança de custo | Tags `environment-key`/`expires-at` em todos os recursos, [janitor](../.github/workflows/preview-janitor.yml) e budget por RG, opcional (ligado quando `budget_contact_emails` é informado) |
+| Gestão assistida | Copilot + [Azure/GitHub/Terraform MCP](.vscode/mcp.json) e [prompt files](../.github/prompts) |
 
 ### Workflows
 
 | Workflow | Gatilho | O que faz |
 |---|---|---|
-| [preview-environment](.github/workflows/preview-environment.yml) | manual (`env_key`, `create`/`destroy`, `ttl_days`) | Cria a infra e a branch `preview/<env_key>` e dispara o primeiro deploy; ou limpa o agente, destrói a infra, remove o state e apaga a branch |
-| [deploy](.github/workflows/deploy.yml) | push em `main` e `preview/**` | `terraform apply` do ambiente da branch → deploy da Web App → publica agente e base → smoke test |
-| [pr-validation](.github/workflows/pr-validation.yml) | PR para `main` ou `preview/**` | Build, `fmt`/`validate` e `plan` do ambiente de **destino**, com comentário no PR |
-| [preview-janitor](.github/workflows/preview-janitor.yml) | dias úteis 08:00 BRT | Lista previews com `expires-at` vencido e abre uma issue ou destrói |
+| [preview-environment](../.github/workflows/preview-environment.yml) | manual (`env_key`, `create`/`destroy`, `ttl_days`) | Cria a infra e a branch `preview/<env_key>` e dispara o primeiro deploy; ou limpa o agente, destrói a infra, remove o state e apaga a branch |
+| [deploy](../.github/workflows/deploy.yml) | push em `main` e `preview/**` | `terraform apply` do ambiente da branch → deploy da Web App → publica agente e base → smoke test |
+| [pr-validation](../.github/workflows/pr-validation.yml) | PR para `main` ou `preview/**` | Build, `fmt`/`validate` e `plan` do ambiente de **destino**, com comentário no PR |
+| [preview-janitor](../.github/workflows/preview-janitor.yml) | dias úteis 08:00 BRT | Lista previews com `expires-at` vencido e abre uma issue ou destrói |
 
 ## Estrutura
 

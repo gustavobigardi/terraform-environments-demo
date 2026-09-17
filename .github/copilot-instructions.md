@@ -14,7 +14,8 @@ Este repositório demonstra **ambientes dinâmicos (preview environments)** no A
   - Compartilhados: `rg-supportagent-shared`, `asp-supportagent-shared`, `log-supportagent-shared`
 - **Tags presentes em todos os recursos de ambiente**: `project`, `environment-key`, `environment-type` (`main|preview`), `branch`, `created-by`, `expires-at` (ISO 8601 ou `never`), `managed-by`.
 - **State do Terraform**: `app/<env_key>.tfstate` no container `tfstate` (variáveis `TFSTATE_*`).
-- **Agente**: definido em `agent/agent.json`, prompt em `agent/instructions.md`, base de conhecimento em `agent/knowledge/`. Publicado por `src/SupportAgent.AgentSync` no deploy.
+- **Agente**: definido em `demo/agent/agent.json`, prompt em `demo/agent/instructions.md`, base de conhecimento em `demo/agent/knowledge/`. Publicado por `demo/src/SupportAgent.AgentSync` no deploy.
+- **Código da demo**: todo o código-fonte, Terraform e scripts ficam em `demo/` (`.github/` fica na raiz do repositório).
 
 ## Como responder sobre ambientes
 

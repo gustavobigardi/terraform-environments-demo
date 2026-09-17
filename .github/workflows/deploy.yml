@@ -9,6 +9,7 @@ on:
       - "preview/**"
     paths-ignore:
       - README.md
+      - "demo/README.md"
       - ".github/prompts/**"
       - ".vscode/**"
   workflow_dispatch:
@@ -37,7 +38,7 @@ env:
   TF_VAR_workload: ${{ vars.WORKLOAD }}
   TF_VAR_unique_suffix: ${{ vars.UNIQUE_SUFFIX }}
   TF_IN_AUTOMATION: "true"
-  TF_DIR: infra/environments/app
+  TF_DIR: demo/infra/environments/app
 
 jobs:
   resolve:
@@ -65,7 +66,7 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: dotnet publish
-        run: dotnet publish src/SupportAgent.Web -c Release -o "$RUNNER_TEMP/web"
+        run: dotnet publish demo/src/SupportAgent.Web -c Release -o "$RUNNER_TEMP/web"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -102,7 +103,7 @@ jobs:
 
       # A branch decide QUAL ambiente recebe a infra: a chave do state vem dela.
       - name: terraform init (state ${{ env.STATE_KEY }})
-        run: scripts/tf-init.sh "$TF_DIR" "$STATE_KEY"
+        run: demo/scripts/tf-init.sh "$TF_DIR" "$STATE_KEY"
 
       - name: terraform apply
         run: |
@@ -133,10 +134,10 @@ jobs:
       # O prompt do agente e a base de conhecimento também são "deployados" por ambiente.
       - name: Publicar agente e base de conhecimento
         run: |
-          dotnet run --project src/SupportAgent.AgentSync -c Release -- sync \
+          dotnet run --project demo/src/SupportAgent.AgentSync -c Release -- sync \
             --endpoint "${{ steps.tf.outputs.foundry_project_endpoint }}" \
             --env-key "$ENV_KEY" \
-            --agent-dir agent
+            --agent-dir demo/agent
 
       - name: Smoke test
         run: |

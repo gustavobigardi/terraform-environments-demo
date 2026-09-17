@@ -47,11 +47,11 @@ jobs:
 
       - uses: hashicorp/setup-terraform@v3
 
-      - run: terraform fmt -check -recursive infra
+      - run: terraform fmt -check -recursive demo/infra
 
       - name: terraform validate
         run: |
-          for stack in infra/shared infra/environments/app; do
+          for stack in demo/infra/shared demo/infra/environments/app; do
             terraform -chdir="$stack" init -backend=false -input=false > /dev/null
             terraform -chdir="$stack" validate
           done
@@ -79,7 +79,7 @@ jobs:
 
       - name: terraform plan (${{ steps.env.outputs.env-key }})
         run: |
-          scripts/tf-init.sh "$TF_DIR" "${{ steps.env.outputs.state-key }}"
+          demo/scripts/tf-init.sh "$TF_DIR" "${{ steps.env.outputs.state-key }}"
           terraform -chdir="$TF_DIR" plan -input=false -lock=false -no-color \
             -var "env_key=${{ steps.env.outputs.env-key }}" \
             -var "branch=${{ steps.env.outputs.branch }}" \
@@ -100,7 +100,7 @@ jobs:
             echo ""
             echo "**Mudanças no agente (prompt/base de conhecimento):**"
             echo '```'
-            git diff --stat "origin/$BASE_REF...HEAD" -- agent/ || true
+            git diff --stat "origin/$BASE_REF...HEAD" -- demo/agent/ || true
             echo '```'
             echo "<details><summary>Plano completo</summary>"
             echo ""
