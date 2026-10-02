@@ -1,9 +1,9 @@
 name: Preview janitor
 
 on:
-  schedule:
+  # schedule:
     # Dias úteis, 08:00 em Brasília (11:00 UTC).
-    - cron: "0 11 * * 1-5"
+    # - cron: "0 11 * * 1-5"
   workflow_dispatch:
     inputs:
       auto_destroy:
